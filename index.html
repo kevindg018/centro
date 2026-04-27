@@ -2023,6 +2023,8 @@
                     <h3 class="font-bold text-lg mb-4 text-amber-500">Ajuste de Stock Rápido</h3>
                     <div class="flex flex-wrap gap-4 items-end">
                         <div class="flex-1 min-w-[200px]">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Buscar por código</label>
+                            <input id="inv-prod-search" type="text" placeholder="Escribe el código del producto..." class="w-full bg-slate-900 border border-slate-600 rounded p-2 text-slate-200 mb-2">
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Producto</label>
                             <select id="inv-prod" class="w-full bg-slate-900 border border-slate-600 rounded p-2 text-slate-200">
                                 ${db.products.map(p => `<option value="${p.id}">${p.name} (${p.code || 'SIN-CODIGO'})</option>`).join('')}
