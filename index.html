@@ -2062,7 +2062,7 @@
                             </thead>
                             <tbody class="divide-y divide-slate-700">
                                 ${db.sales.slice(-15).reverse().map(s => `
-                                    <tr class="hover:bg-slate-700/50">
+                                    <tr class="hover:bg-slate-700/50" data-sale-id="${s.id}">
                                         <td class="p-3">${new Date(s.date).toLocaleDateString()}</td>
                                      <td class="p-3 text-xs text-slate-400">${s.items.length} items • ${s.items.map(item => item.name).join(', ')} (Ref: ${s.id.substr(-4)})</td>
                                         <td class="p-3 text-right font-bold text-amber-500">${formatMoney(s.total)}</td>
@@ -2085,33 +2085,6 @@
                 </div>
             `;
 
-            const invProdSelect = document.getElementById('inv-prod');
-            const invProdSearch = document.getElementById('inv-prod-search');
-            const allInventoryProducts = Array.isArray(db.products) ? [...db.products] : [];
-            const renderInventoryProductOptions = () => {
-                if (!invProdSelect) return;
-                const normalizedQuery = normalizeText((invProdSearch?.value || '').trim());
-                const currentValue = invProdSelect.value;
-
-                const filteredProducts = allInventoryProducts.filter((product) => {
-                    if (!normalizedQuery) return true;
-                    const code = normalizeText(product.code || '');
-                    return code.includes(normalizedQuery);
-                });
-
-                invProdSelect.innerHTML = filteredProducts.length
-                    ? filteredProducts.map((p) => `<option value="${p.id}">${p.name} (${p.code || 'SIN-CODIGO'})</option>`).join('')
-                    : '<option value="">No hay coincidencias</option>';
-
-                if (filteredProducts.some((p) => String(p.id) === String(currentValue))) {
-                    invProdSelect.value = currentValue;
-                }
-            };
-            renderInventoryProductOptions();
-            if (invProdSearch) {
-                invProdSearch.addEventListener('input', renderInventoryProductOptions);
-            }
-
             const searchInput = document.getElementById('inventory-search');
             if (searchInput) {
                 searchInput.addEventListener('input', () => {
@@ -2119,9 +2092,18 @@
                     const rows = container.querySelectorAll('tbody tr');
                     let visible = 0;
                     rows.forEach((row) => {
-                        const detailCell = row.children[1];
-                        if (!detailCell) return;
-                        const matches = !query || normalizeText(detailCell.innerText).includes(query);
+                        const rowSaleId = row.dataset.saleId;
+                        const sale = db.sales.find((s) => String(s.id) === String(rowSaleId));
+                        const searchableText = !sale
+                            ? ''
+                            : normalizeText([
+                                sale.id,
+                                ...(sale.items || []).flatMap((item) => {
+                                    const product = db.products.find((p) => String(p.id) === String(item.id));
+                                    return [item.name || '', product?.code || ''];
+                                })
+                            ].join(' '));
+                        const matches = !query || searchableText.includes(query);
                         row.style.display = matches && visible < 120 ? '' : 'none';
                         if (matches) visible += 1;
                     });
@@ -2132,7 +2114,6 @@
         function updateStock(factor) {
             const prodId = document.getElementById('inv-prod').value;
             const qty = parseFloat(document.getElementById('inv-qty').value);
-            if(!prodId) return showToast('Selecciona un producto válido', 'error');
             if(!qty) return;
 
             const prod = db.products.find(p => p.id === prodId);
