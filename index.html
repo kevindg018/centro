@@ -815,6 +815,26 @@
             }
             const activeTicket = db.openTickets.find((ticket) => ticket.id === activeTicketId);
             currentCart = Array.isArray(activeTicket?.cart) ? activeTicket.cart : [];
+        function ensureOpenTickets() {
+            if (!Array.isArray(db.openTickets)) db.openTickets = [];
+            if (db.openTickets.length === 0) {
+                db.openTickets = [{ id: generateId(), name: 'Ticket 1', cart: [] }];
+            }
+            db.openTickets = db.openTickets.map((ticket) => ({
+                ...ticket,
+                cart: Array.isArray(ticket.cart)
+                    ? ticket.cart.map((item) => ({
+                        ...item,
+                        qty: Math.max(1, Math.round(Number(item.qty) || 1)),
+                        qtyStep: 1
+                    }))
+                    : []
+            }));
+            if (!db.openTickets.some((ticket) => ticket.id === activeTicketId)) {
+                activeTicketId = db.openTickets[0].id;
+            }
+            const activeTicket = db.openTickets.find((ticket) => ticket.id === activeTicketId);
+            currentCart = Array.isArray(activeTicket?.cart) ? activeTicket.cart : [];
         }
 
         function persistActiveTicketCart() {
@@ -837,6 +857,17 @@
             renderPOS(document.getElementById('content-area'));
         }
 
+        function switchSaleTicket(ticketId) {
+            ensureOpenTickets();
+            persistActiveTicketCart();
+            const nextTicket = db.openTickets.find((ticket) => ticket.id === ticketId);
+            if (!nextTicket) return;
+            activeTicketId = ticketId;
+            currentCart = nextTicket.cart || [];
+            saveDB();
+            updatePosTicketTabsUI();
+            updateCartUI();
+        }
         function switchSaleTicket(ticketId) {
             ensureOpenTickets();
             persistActiveTicketCart();
@@ -894,6 +925,7 @@
                     <div class="bg-slate-900/80 border border-slate-700 rounded-xl p-3">
                         <div class="flex items-center justify-between gap-2 flex-wrap">
                             <div class="flex gap-2 overflow-x-auto pb-1" id="pos-ticket-tabs"></div>
+                            <div class="flex gap-2 overflow-x-auto pb-1" id="pos-ticket-tabs"></div>
                             <button onclick="createNewSaleTicket()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-xs font-bold">
                                 <i class="fas fa-plus mr-1"></i> Nuevo ticket
                             </button>
@@ -925,6 +957,7 @@
                             <div class="p-4 bg-slate-900 border-b border-slate-700 rounded-t-xl flex justify-between items-center">
                                 <span class="font-bold text-amber-500 tracking-wide"><i class="fas fa-receipt mr-2"></i>TICKET ACTUAL</span>
                                 <div class="flex items-center gap-2">
+                                    <button id="pos-close-ticket-btn" onclick="closeSaleTicket('${activeTicketId}')" class="text-xs text-slate-400 hover:text-red-400 flex items-center gap-1"><i class="fas fa-xmark"></i> Cerrar</button>
                                     <button id="pos-close-ticket-btn" onclick="closeSaleTicket('${activeTicketId}')" class="text-xs text-slate-400 hover:text-red-400 flex items-center gap-1"><i class="fas fa-xmark"></i> Cerrar</button>
                                     <button onclick="clearCart()" class="text-xs text-red-500 hover:text-red-400 flex items-center gap-1"><i class="fas fa-trash"></i> LIMPIAR</button>
                                 </div>
@@ -961,6 +994,11 @@
                 const posSearch = document.getElementById('pos-search');
                 if (posSearch) {
                     posSearch.addEventListener('input', (e) => {
+           if(db.caja.isOpen) {
+                updatePosTicketTabsUI();
+                const posSearch = document.getElementById('pos-search');
+                if (posSearch) {
+                    posSearch.addEventListener('input', (e) => {
                         clearTimeout(posSearchTimer);
                         const value = e.target.value;
                         posSearchTimer = setTimeout(() => searchPOS(value), 140);
@@ -969,6 +1007,19 @@
                 searchPOS('');
                 updateCartUI();
             }
+        }
+
+        function updatePosTicketTabsUI() {
+            const tabs = document.getElementById('pos-ticket-tabs');
+            if (tabs) {
+                tabs.innerHTML = db.openTickets.map((ticket) => `
+                    <button onclick="switchSaleTicket('${ticket.id}')" class="px-3 py-2 rounded-lg border text-xs font-bold whitespace-nowrap ${ticket.id === activeTicketId ? 'bg-amber-500 text-slate-900 border-amber-400' : 'bg-slate-800 text-slate-300 border-slate-700'}">
+                        ${ticket.name} (${ticket.cart?.length || 0})
+                    </button>
+                `).join('');
+            }
+            const closeBtn = document.getElementById('pos-close-ticket-btn');
+            if (closeBtn) closeBtn.setAttribute('onclick', `closeSaleTicket('${activeTicketId}')`);
         }
 
         function updatePosTicketTabsUI() {
@@ -1124,6 +1175,19 @@
                     measure: prod.measure,
                     priceOptions: productPrices,
                     selectedPriceIndex: 0
+            if(existing) {
+                existing.qty = Math.max(1, Math.round((Number(existing.qty) || 0) + (Number(existing.qtyStep) || 1)));
+            } else {
+                currentCart.push({
+                    id: prod.id,
+                    name: prod.name,
+                    price: productPrices[0],
+                    qty: 1,
+                    qtyStep: 1,
+                    originalPrice: productPrices[0],
+                    measure: prod.measure,
+                    priceOptions: productPrices,
+                    selectedPriceIndex: 0
                 });
             }
             updateCartUI();
@@ -1158,6 +1222,12 @@
                                 value="${item.qty}"
                                 onchange="updateItemQty(${idx}, this.value)"
                                 class="w-10 p-1 bg-transparent text-center font-bold text-white border-none focus:ring-0 outline-none appearance-none m-0">
+                        <div class="flex items-center bg-slate-900 rounded border border-slate-600">
+                            <button onclick="updateItemQty(${idx}, ${item.qty - item.qtyStep})" class="px-2 py-1 hover:bg-slate-700 text-slate-400">-</button>
+                            <input type="number" min="1" step="${item.qtyStep || 1}"
+                                value="${item.qty}"
+                                onchange="updateItemQty(${idx}, this.value)"
+                                class="w-10 p-1 bg-transparent text-center font-bold text-white border-none focus:ring-0 outline-none appearance-none m-0">
                             <button onclick="updateItemQty(${idx}, ${item.qty + item.qtyStep})" class="px-2 py-1 hover:bg-slate-700 text-slate-400">+</button>
                         </div>
                         <div class="font-bold text-amber-500">
@@ -1183,6 +1253,25 @@
             persistActiveTicketCart();
             saveDB();
             updatePosTicketTabsUI();
+        }
+
+        function updateItemQty(idx, val) {
+            const item = currentCart[idx];
+            if (!item) return;
+            let newVal = Math.round(Number(val));
+            if (!Number.isFinite(newVal) || newVal <= 0) {
+                removeFromCart(idx);
+                return;
+            }
+            if (newVal <= 0) {
+                removeFromCart(idx);
+                return;
+            }
+            currentCart[idx].qty = newVal;
+            if(totalEl) totalEl.innerText = formatMoney(total);
+            if(subtotalEl) subtotalEl.innerText = formatMoney(total);
+            persistActiveTicketCart();
+            saveDB();
         }
 
         function updateItemQty(idx, val) {
@@ -2040,6 +2129,19 @@
                                 ${db.products.map(p => `<option value="${p.id}">${p.name} (${p.code || 'SIN-CODIGO'})</option>`).join('')}
                             </select>
                         </div>
+        function renderInventory(container) {
+            container.innerHTML = `
+                <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg mb-6">
+                    <h3 class="font-bold text-lg mb-4 text-amber-500">Ajuste de Stock Rápido</h3>
+                    <div class="flex flex-wrap gap-4 items-end">
+                        <div class="flex-1 min-w-[200px]">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Buscar por código</label>
+                            <input id="inv-prod-search" type="text" placeholder="Escribe el código del producto..." class="w-full bg-slate-900 border border-slate-600 rounded p-2 text-slate-200 mb-2">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Producto</label>
+                            <select id="inv-prod" class="w-full bg-slate-900 border border-slate-600 rounded p-2 text-slate-200">
+                                ${db.products.map(p => `<option value="${p.id}">${p.name} (${p.code || 'SIN-CODIGO'})</option>`).join('')}
+                            </select>
+                        </div>
                         <div class="w-32">
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Cantidad</label>
                             <input type="number" step="0.001" id="inv-qty" class="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" placeholder="0">
@@ -2055,6 +2157,7 @@
                     <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-4">
                         <h3 class="font-bold text-lg text-white">Historial de Ventas</h3>
                         <div class="flex gap-2">
+                            <input id="inventory-search" type="text" placeholder="Buscar producto o código en ventas..." class="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
                             <input id="inventory-search" type="text" placeholder="Buscar producto o código en ventas..." class="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
                             <button onclick="exportToExcel()" class="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1 rounded text-sm"><i class="fas fa-file-excel mr-1"></i> Exportar</button>
                         </div>
@@ -2073,6 +2176,11 @@
                             <tbody class="divide-y divide-slate-700">
                                 ${db.sales.slice(-15).reverse().map(s => `
                                     <tr class="hover:bg-slate-700/50">
+                                        <td class="p-3">${new Date(s.date).toLocaleDateString()}</td>
+                                     <td class="p-3 text-xs text-slate-400">${s.items.length} items • ${s.items.map(item => item.name).join(', ')} (Ref: ${s.id.substr(-4)})</td>
+                                        <td class="p-3 text-right font-bold text-amber-500">${formatMoney(s.total)}</td>
+                                ${db.sales.slice(-15).reverse().map(s => `
+                                    <tr class="hover:bg-slate-700/50" data-sale-id="${s.id}">
                                         <td class="p-3">${new Date(s.date).toLocaleDateString()}</td>
                                      <td class="p-3 text-xs text-slate-400">${s.items.length} items • ${s.items.map(item => item.name).join(', ')} (Ref: ${s.id.substr(-4)})</td>
                                         <td class="p-3 text-right font-bold text-amber-500">${formatMoney(s.total)}</td>
@@ -2142,6 +2250,38 @@
             const prodId = document.getElementById('inv-prod').value;
             const qty = parseFloat(document.getElementById('inv-qty').value);
             if(!prodId) return showToast('Selecciona un producto válido', 'error');
+            if(!qty) return;
+            `;
+
+            const searchInput = document.getElementById('inventory-search');
+            if (searchInput) {
+                searchInput.addEventListener('input', () => {
+                    const query = normalizeText(searchInput.value.trim());
+                    const rows = container.querySelectorAll('tbody tr');
+                    let visible = 0;
+                    rows.forEach((row) => {
+                        const rowSaleId = row.dataset.saleId;
+                        const sale = db.sales.find((s) => String(s.id) === String(rowSaleId));
+                        const searchableText = !sale
+                            ? ''
+                            : normalizeText([
+                                sale.id,
+                                ...(sale.items || []).flatMap((item) => {
+                                    const product = db.products.find((p) => String(p.id) === String(item.id));
+                                    return [item.name || '', product?.code || ''];
+                                })
+                            ].join(' '));
+                        const matches = !query || searchableText.includes(query);
+                        row.style.display = matches && visible < 120 ? '' : 'none';
+                        if (matches) visible += 1;
+                    });
+                });
+            }
+        }
+
+        function updateStock(factor) {
+            const prodId = document.getElementById('inv-prod').value;
+            const qty = parseFloat(document.getElementById('inv-qty').value);
             if(!qty) return;
 
             const prod = db.products.find(p => p.id === prodId);
@@ -2898,4 +3038,5 @@ document.getElementById("importarArchivo").addEventListener("change", (e) => {
 
     </script>
 </body>
+</html>
 </html>
