@@ -800,6 +800,16 @@
             if (db.openTickets.length === 0) {
                 db.openTickets = [{ id: generateId(), name: 'Ticket 1', cart: [] }];
             }
+            db.openTickets = db.openTickets.map((ticket) => ({
+                ...ticket,
+                cart: Array.isArray(ticket.cart)
+                    ? ticket.cart.map((item) => ({
+                        ...item,
+                        qty: Math.max(1, Math.round(Number(item.qty) || 1)),
+                        qtyStep: 1
+                    }))
+                    : []
+            }));
             if (!db.openTickets.some((ticket) => ticket.id === activeTicketId)) {
                 activeTicketId = db.openTickets[0].id;
             }
@@ -1093,14 +1103,14 @@
             ];
             
             if(existing) {
-                existing.qty = Number((existing.qty + existing.qtyStep).toFixed(3));
+                existing.qty = Math.max(1, Math.round((Number(existing.qty) || 0) + (Number(existing.qtyStep) || 1)));
             } else {
                 currentCart.push({
                     id: prod.id,
                     name: prod.name,
                     price: productPrices[0],
                     qty: 1,
-                    qtyStep: 0.001,
+                    qtyStep: 1,
                     originalPrice: productPrices[0],
                     measure: prod.measure,
                     priceOptions: productPrices,
@@ -1135,9 +1145,9 @@
                     <div class="flex items-center justify-between text-xs">
                         <div class="flex items-center bg-slate-900 rounded border border-slate-600">
                             <button onclick="updateItemQty(${idx}, ${item.qty - item.qtyStep})" class="px-2 py-1 hover:bg-slate-700 text-slate-400">-</button>
-                            <input type="number" step="${item.qtyStep || 0.001}"
-                                value="${item.qty}" 
-                                onchange="updateItemQty(${idx}, this.value)" 
+                            <input type="number" min="1" step="${item.qtyStep || 1}"
+                                value="${item.qty}"
+                                onchange="updateItemQty(${idx}, this.value)"
                                 class="w-10 p-1 bg-transparent text-center font-bold text-white border-none focus:ring-0 outline-none appearance-none m-0">
                             <button onclick="updateItemQty(${idx}, ${item.qty + item.qtyStep})" class="px-2 py-1 hover:bg-slate-700 text-slate-400">+</button>
                         </div>
@@ -1168,16 +1178,10 @@
         function updateItemQty(idx, val) {
             const item = currentCart[idx];
             if (!item) return;
-            let newVal = parseFloat(val);
+            let newVal = Math.round(Number(val));
             if (!Number.isFinite(newVal) || newVal <= 0) {
                 removeFromCart(idx);
                 return;
-            }
-            newVal = Number(newVal.toFixed(3));
-            const available = getAvailableStock(item.id, idx);
-            if (newVal > available) {
-                showToast(`No hay stock suficiente para ${item.name}. Disponible: ${formatQty(Math.max(available, 0))}`, 'error');
-                newVal = Math.max(available, 0);
             }
             if (newVal <= 0) {
                 removeFromCart(idx);
@@ -2019,6 +2023,8 @@
                     <h3 class="font-bold text-lg mb-4 text-amber-500">Ajuste de Stock Rápido</h3>
                     <div class="flex flex-wrap gap-4 items-end">
                         <div class="flex-1 min-w-[200px]">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Buscar por código</label>
+                            <input id="inv-prod-search" type="text" placeholder="Escribe el código del producto..." class="w-full bg-slate-900 border border-slate-600 rounded p-2 text-slate-200 mb-2">
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Producto</label>
                             <select id="inv-prod" class="w-full bg-slate-900 border border-slate-600 rounded p-2 text-slate-200">
                                 ${db.products.map(p => `<option value="${p.id}">${p.name} (${p.code || 'SIN-CODIGO'})</option>`).join('')}
@@ -2039,7 +2045,7 @@
                     <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-4">
                         <h3 class="font-bold text-lg text-white">Historial de Ventas</h3>
                         <div class="flex gap-2">
-                            <input id="inventory-search" type="text" placeholder="Buscar producto en ventas..." class="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
+                            <input id="inventory-search" type="text" placeholder="Buscar producto o código en ventas..." class="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm">
                             <button onclick="exportToExcel()" class="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1 rounded text-sm"><i class="fas fa-file-excel mr-1"></i> Exportar</button>
                         </div>
                     </div>
@@ -2079,6 +2085,33 @@
                 </div>
             `;
 
+            const invProdSelect = document.getElementById('inv-prod');
+            const invProdSearch = document.getElementById('inv-prod-search');
+            const allInventoryProducts = Array.isArray(db.products) ? [...db.products] : [];
+            const renderInventoryProductOptions = () => {
+                if (!invProdSelect) return;
+                const normalizedQuery = normalizeText((invProdSearch?.value || '').trim());
+                const currentValue = invProdSelect.value;
+
+                const filteredProducts = allInventoryProducts.filter((product) => {
+                    if (!normalizedQuery) return true;
+                    const code = normalizeText(product.code || '');
+                    return code.includes(normalizedQuery);
+                });
+
+                invProdSelect.innerHTML = filteredProducts.length
+                    ? filteredProducts.map((p) => `<option value="${p.id}">${p.name} (${p.code || 'SIN-CODIGO'})</option>`).join('')
+                    : '<option value="">No hay coincidencias</option>';
+
+                if (filteredProducts.some((p) => String(p.id) === String(currentValue))) {
+                    invProdSelect.value = currentValue;
+                }
+            };
+            renderInventoryProductOptions();
+            if (invProdSearch) {
+                invProdSearch.addEventListener('input', renderInventoryProductOptions);
+            }
+
             const searchInput = document.getElementById('inventory-search');
             if (searchInput) {
                 searchInput.addEventListener('input', () => {
@@ -2099,6 +2132,7 @@
         function updateStock(factor) {
             const prodId = document.getElementById('inv-prod').value;
             const qty = parseFloat(document.getElementById('inv-qty').value);
+            if(!prodId) return showToast('Selecciona un producto válido', 'error');
             if(!qty) return;
 
             const prod = db.products.find(p => p.id === prodId);
