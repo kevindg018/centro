@@ -845,6 +845,7 @@
             activeTicketId = ticketId;
             currentCart = nextTicket.cart || [];
             saveDB();
+            updatePosTicketTabsUI();
             updateCartUI();
         }
 
@@ -892,13 +893,7 @@
                     
                     <div class="bg-slate-900/80 border border-slate-700 rounded-xl p-3">
                         <div class="flex items-center justify-between gap-2 flex-wrap">
-                            <div class="flex gap-2 overflow-x-auto pb-1">
-                                ${db.openTickets.map(ticket => `
-                                    <button onclick="switchSaleTicket('${ticket.id}')" class="px-3 py-2 rounded-lg border text-xs font-bold whitespace-nowrap ${ticket.id === activeTicketId ? 'bg-amber-500 text-slate-900 border-amber-400' : 'bg-slate-800 text-slate-300 border-slate-700'}">
-                                        ${ticket.name} (${ticket.cart?.length || 0})
-                                    </button>
-                                `).join('')}
-                            </div>
+                            <div class="flex gap-2 overflow-x-auto pb-1" id="pos-ticket-tabs"></div>
                             <button onclick="createNewSaleTicket()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-xs font-bold">
                                 <i class="fas fa-plus mr-1"></i> Nuevo ticket
                             </button>
@@ -930,7 +925,7 @@
                             <div class="p-4 bg-slate-900 border-b border-slate-700 rounded-t-xl flex justify-between items-center">
                                 <span class="font-bold text-amber-500 tracking-wide"><i class="fas fa-receipt mr-2"></i>TICKET ACTUAL</span>
                                 <div class="flex items-center gap-2">
-                                    <button onclick="closeSaleTicket('${activeTicketId}')" class="text-xs text-slate-400 hover:text-red-400 flex items-center gap-1"><i class="fas fa-xmark"></i> Cerrar</button>
+                                    <button id="pos-close-ticket-btn" onclick="closeSaleTicket('${activeTicketId}')" class="text-xs text-slate-400 hover:text-red-400 flex items-center gap-1"><i class="fas fa-xmark"></i> Cerrar</button>
                                     <button onclick="clearCart()" class="text-xs text-red-500 hover:text-red-400 flex items-center gap-1"><i class="fas fa-trash"></i> LIMPIAR</button>
                                 </div>
                             </div>
@@ -962,6 +957,7 @@
                 </div>
             `;
            if(db.caja.isOpen) {
+                updatePosTicketTabsUI();
                 const posSearch = document.getElementById('pos-search');
                 if (posSearch) {
                     posSearch.addEventListener('input', (e) => {
@@ -973,6 +969,19 @@
                 searchPOS('');
                 updateCartUI();
             }
+        }
+
+        function updatePosTicketTabsUI() {
+            const tabs = document.getElementById('pos-ticket-tabs');
+            if (tabs) {
+                tabs.innerHTML = db.openTickets.map((ticket) => `
+                    <button onclick="switchSaleTicket('${ticket.id}')" class="px-3 py-2 rounded-lg border text-xs font-bold whitespace-nowrap ${ticket.id === activeTicketId ? 'bg-amber-500 text-slate-900 border-amber-400' : 'bg-slate-800 text-slate-300 border-slate-700'}">
+                        ${ticket.name} (${ticket.cart?.length || 0})
+                    </button>
+                `).join('');
+            }
+            const closeBtn = document.getElementById('pos-close-ticket-btn');
+            if (closeBtn) closeBtn.setAttribute('onclick', `closeSaleTicket('${activeTicketId}')`);
         }
 
         function setPosFilter(cat) {
