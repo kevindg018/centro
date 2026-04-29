@@ -233,8 +233,14 @@
                 const parsed = Number(val);
                 return Number.isFinite(parsed) ? parsed : (idx === 0 ? baseSell : null);
             });
+            const rawCodes = Array.isArray(product.barcodeCodes)
+                ? product.barcodeCodes
+                : [product.code].filter(Boolean);
+            const normalizedCodes = [...new Set(rawCodes.map((code) => String(code).trim()).filter(Boolean))];
             return {
                 ...product,
+                code: normalizedCodes[0] || '',
+                barcodeCodes: normalizedCodes,
                 sellPrice: normalizedSellPrices[0],
                 sellPrices: normalizedSellPrices
             };
@@ -558,7 +564,7 @@
                                 <input type="text" id="prod-name" placeholder="Nombre (Ej: Bolsa plastica)" class="w-full rounded p-2 text-sm" required>
                             </div>
                             <div class="md:col-span-1">
-                                <input type="text" id="prod-code" placeholder="Código Barras" class="w-full rounded p-2 text-sm" required>
+                                <input type="text" id="prod-code" placeholder="Códigos de barras (separados por coma)" class="w-full rounded p-2 text-sm" required>
                             </div>
                              <div class="md:col-span-1">
                                 <input type="text" id="prod-brand" placeholder="Marca" class="w-full rounded p-2 text-sm">
@@ -616,7 +622,7 @@
                 const newProd = {
     id: generateId(),
     name: document.getElementById('prod-name').value,
-    code: document.getElementById('prod-code').value,
+    barcodeCodes: document.getElementById('prod-code').value.split(',').map((code) => code.trim()).filter(Boolean),
     brand: document.getElementById('prod-brand').value,
     category: document.getElementById('prod-cat').value,
     measure: document.getElementById('prod-measure').value,
@@ -627,6 +633,12 @@
         parseFloat(document.getElementById('prod-sell-3').value) || null
     ]
 };
+                newProd.barcodeCodes = [...new Set(newProd.barcodeCodes)];
+                if (!newProd.barcodeCodes.length) {
+                    showToast('Ingresa al menos un código de barras', 'error');
+                    return;
+                }
+                newProd.code = newProd.barcodeCodes[0];
                 newProd.sellPrice = newProd.sellPrices[0];
 
              if (productEditing) {
@@ -689,7 +701,7 @@
                 <tr class="hover:bg-slate-700/50 transition">
                     <td class="p-3">
                         <div class="font-bold text-white">${p.name}</div>
-                        <div class="text-xs text-slate-500">${p.code} | ${p.brand} | ${p.measure}</div>
+                        <div class="text-xs text-slate-500">${(p.barcodeCodes || [p.code]).join(', ')} | ${p.brand} | ${p.measure}</div>
                     </td>
                     <td class="p-3"><span class="bg-slate-900 px-2 py-0.5 rounded text-xs text-slate-400 border border-slate-700">${p.category}</span></td>
                     <td class="p-3 text-right ${p.stock <= 5 ? 'text-red-500 font-bold' : 'text-emerald-400'}">${p.stock}</td>
@@ -726,7 +738,7 @@
             }
 
             const matches = db.products
-                .filter((p) => normalizeText((p.code || '').trim()).includes(normalizedQuery))
+                .filter((p) => normalizeText(((p.barcodeCodes || [p.code]).join(' ')).trim()).includes(normalizedQuery))
                 .slice(0, 12);
 
             if (!matches.length) {
@@ -737,7 +749,7 @@
             resultsEl.innerHTML = matches.map((p) => `
                 <button type="button" onclick="editProduct('${p.id}')" class="w-full text-left bg-slate-900 border border-slate-700 rounded p-2 hover:border-amber-500 transition">
                     <div class="font-semibold text-slate-200">${p.name}</div>
-                    <div class="text-slate-500 font-mono">${p.code}</div>
+                    <div class="text-slate-500 font-mono">${(p.barcodeCodes || [p.code]).join(', ')}</div>
                 </button>
             `).join('');
         }
@@ -747,7 +759,7 @@
             if (!product) return;
 
             document.getElementById('prod-name').value = product.name;
-            document.getElementById('prod-code').value = product.code;
+            document.getElementById('prod-code').value = (product.barcodeCodes || [product.code]).filter(Boolean).join(', ');
             document.getElementById('prod-brand').value = product.brand;
             document.getElementById('prod-cat').value = product.category;
             document.getElementById('prod-measure').value = product.measure;
@@ -786,7 +798,7 @@
                 return {
                     product: p,
                     normalizedName: normalizeText(p.name),
-                    normalizedCode: normalizeText(p.code),
+                    normalizedCodes: (p.barcodeCodes || [p.code]).map((code) => normalizeText(String(code))),
                     normalizedBrand: normalizeText(p.brand || ''),
                     normalizedCategory: normalizeText(p.category || '')
                 };
@@ -1022,15 +1034,15 @@
 
                 return (
                     item.normalizedName.includes(normalizedQuery) ||
-                    item.normalizedCode.includes(normalizedQuery) ||
+                    item.normalizedCodes.some((code) => code.includes(normalizedQuery)) ||
                     item.normalizedBrand.includes(normalizedQuery)
                 );
             });
 
             if (normalizedQuery) {
                 matches.sort((a, b) => {
-                    const aCodeStarts = a.normalizedCode.startsWith(normalizedQuery) ? 1 : 0;
-                    const bCodeStarts = b.normalizedCode.startsWith(normalizedQuery) ? 1 : 0;
+                    const aCodeStarts = a.normalizedCodes.some((code) => code.startsWith(normalizedQuery)) ? 1 : 0;
+                    const bCodeStarts = b.normalizedCodes.some((code) => code.startsWith(normalizedQuery)) ? 1 : 0;
                     if (aCodeStarts !== bCodeStarts) return bCodeStarts - aCodeStarts;
 
                     const aNameStarts = a.normalizedName.startsWith(normalizedQuery) ? 1 : 0;
