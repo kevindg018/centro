@@ -553,6 +553,10 @@
                             <input type="text" id="product-code-search" class="w-full rounded px-3 py-2 text-sm bg-slate-900 border border-slate-600" placeholder="Ej: 7701234567890">
                             <div id="product-code-search-results" class="mt-2 max-h-44 overflow-auto space-y-2 text-xs"></div>
                         </div>
+                        <div class="mt-4">
+                            <h4 class="font-semibold text-xs text-slate-400 uppercase mb-2">Filtrar por categoría</h4>
+                            <select id="product-category-filter" class="w-full rounded px-3 py-2 text-sm bg-slate-900 border border-slate-600"></select>
+                        </div>
                     </div>
 
                     <!-- Formulario y Tabla -->
@@ -670,6 +674,10 @@
                 });
                 renderProductCodeSearchResults('');
             }
+            const productCategoryFilter = document.getElementById('product-category-filter');
+            if (productCategoryFilter) {
+                productCategoryFilter.addEventListener('change', refreshProductConfigUI);
+            }
         } // 👈 CIERRA renderProducts
 
 
@@ -688,6 +696,7 @@
             const prodCatSelect = document.getElementById('prod-cat');
             const prodMeasureSelect = document.getElementById('prod-measure');
             const prodTable = document.getElementById('prod-table-body');
+            const productCategoryFilter = document.getElementById('product-category-filter');
 
             if(!catList) return;
 
@@ -696,8 +705,18 @@
             
             prodCatSelect.innerHTML = '<option value="">Categoría...</option>' + db.categories.map(c => `<option value="${c}">${c}</option>`).join('');
             prodMeasureSelect.innerHTML = '<option value="">Medida...</option>' + db.measures.map(m => `<option value="${m}">${m}</option>`).join('');
+            if (productCategoryFilter) {
+                const currentFilter = productCategoryFilter.value || 'Todas';
+                productCategoryFilter.innerHTML = '<option value="Todas">Todas las categorías</option>' + db.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+                productCategoryFilter.value = db.categories.includes(currentFilter) ? currentFilter : 'Todas';
+            }
 
-            prodTable.innerHTML = db.products.slice().reverse().map(p => `
+            const selectedCategory = productCategoryFilter?.value || 'Todas';
+            const filteredProducts = selectedCategory === 'Todas'
+                ? db.products
+                : db.products.filter((p) => p.category === selectedCategory);
+
+            prodTable.innerHTML = filteredProducts.slice().reverse().map(p => `
                 <tr class="hover:bg-slate-700/50 transition">
                     <td class="p-3">
                         <div class="font-bold text-white">${p.name}</div>
