@@ -925,6 +925,7 @@
                             <div class="relative">
                                 <i class="fas fa-search absolute left-4 top-3.5 text-slate-500"></i>
   <input type="text" id="pos-search" class="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 p-3 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-amber-500" placeholder="Buscar producto, código o marca...">                            </div>
+                            <div id="pos-code-search-results" class="bg-slate-900/70 border border-slate-700 rounded-lg p-2 text-xs max-h-28 overflow-auto"></div>
 
                             <!-- Grid Productos -->
                             <div id="pos-product-list" class="flex-1 overflow-y-auto grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 content-start pr-1">
@@ -975,10 +976,24 @@
                     posSearch.addEventListener('input', (e) => {
                         clearTimeout(posSearchTimer);
                         const value = e.target.value;
-                        posSearchTimer = setTimeout(() => searchPOS(value), 140);
+                        posSearchTimer = setTimeout(() => {
+                            searchPOS(value);
+                            renderPosCodeSearchResults(value);
+                        }, 140);
+                    });
+                    posSearch.addEventListener('keydown', (e) => {
+                        if (e.key !== 'Enter') return;
+                        const exactProduct = findProductByCode(e.target.value);
+                        if (!exactProduct) return;
+                        e.preventDefault();
+                        addToCart(exactProduct.id);
+                        e.target.value = '';
+                        renderPosCodeSearchResults('');
+                        searchPOS('');
                     });
                 }
                 searchPOS('');
+                renderPosCodeSearchResults('');
                 updateCartUI();
             }
         }
@@ -1010,6 +1025,47 @@
                 }
             });
             searchPOS(document.getElementById('pos-search').value);
+        }
+
+        function findProductByCode(rawCode = '') {
+            const normalizedQuery = normalizeText(String(rawCode).trim());
+            if (!normalizedQuery) return null;
+            const matches = posSearchIndex.filter((item) => item.normalizedCodes.some((code) => code === normalizedQuery));
+            if (matches.length !== 1) return null;
+            return matches[0].product;
+        }
+
+        function renderPosCodeSearchResults(query = '') {
+            const resultsEl = document.getElementById('pos-code-search-results');
+            if (!resultsEl) return;
+            const normalizedQuery = normalizeText(String(query).trim());
+            if (!normalizedQuery) {
+                resultsEl.innerHTML = '<p class="text-slate-500">Escanea o escribe un código para enviarlo al ticket.</p>';
+                return;
+            }
+            const matches = posSearchIndex
+                .filter((item) => item.normalizedCodes.some((code) => code.includes(normalizedQuery)))
+                .slice(0, 8)
+                .map((item) => item.product);
+            if (!matches.length) {
+                resultsEl.innerHTML = '<p class="text-slate-500">Sin coincidencias por código.</p>';
+                return;
+            }
+            resultsEl.innerHTML = matches.map((p) => `
+                <button type="button" onclick="addToCart('${p.id}')" class="w-full text-left p-2 rounded border border-slate-700 bg-slate-800/80 hover:border-amber-500 mb-1 last:mb-0">
+                    <div class="font-semibold text-slate-200">${p.name}</div>
+                    <div class="font-mono text-slate-500">${(p.barcodeCodes || [p.code]).join(', ')}</div>
+                </button>
+            `).join('');
+
+            const exactMatch = findProductByCode(query);
+            if (exactMatch) {
+                addToCart(exactMatch.id);
+                const posSearchInput = document.getElementById('pos-search');
+                if (posSearchInput) posSearchInput.value = '';
+                resultsEl.innerHTML = `<p class="text-emerald-400">${exactMatch.name} agregado al ticket automáticamente.</p>`;
+                searchPOS('');
+            }
         }
 
        function searchPOS(query) {
