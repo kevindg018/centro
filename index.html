@@ -745,6 +745,7 @@
                 .reverse();
 
             prodTable.innerHTML = filteredProducts.map(p => `
+            prodTable.innerHTML = db.products.slice().reverse().map(p => `
                 <tr class="hover:bg-slate-700/50 transition">
                     <td class="p-3">
                         <div class="font-bold text-white">${p.name}</div>
@@ -769,6 +770,10 @@
             `).join('');
             if (!filteredProducts.length) {
                 prodTable.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-slate-500">No hay productos para el filtro seleccionado.</td></tr>';
+
+            const productCodeSearch = document.getElementById('product-code-search');
+            if (productCodeSearch) {
+                renderProductCodeSearchResults(productCodeSearch.value);
             }
         }
 
